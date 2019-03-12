@@ -1,0 +1,14 @@
+#!/usr/bin/env php
+<?php
+// Development.
+if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
+    include_once __DIR__ . '/../vendor/autoload.php';
+}
+// Project.
+else if (file_exists(__DIR__ . '/../../../autoload.php')) {
+    include_once __DIR__ . '/../../../autoload.php';
+}
+else {
+    die('Autoload not found.');
+}
+require 'far.php';
