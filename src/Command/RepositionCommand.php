@@ -1,5 +1,5 @@
 <?php
-namespace IjorTengab\FilesAutoReposition\Command;
+namespace IjorTengab\FilesBulkOperation\Command;
 
 use Symfony\Component\Console\Command\Command;
 

@@ -1,3 +1,4 @@
+echo '###' Start
 echo '###' Persiapan File dan Direktori
 mkdir -p destination/112233-direktur
 mkdir -p source
@@ -10,13 +11,13 @@ find source
 find destination
 VAR=$(cat <<'END_HEREDOC'
     require __DIR__ . '/../../vendor/autoload.php';
-    $app = new \IjorTengab\FilesAutoReposition\Command\Reposition;
+    $app = new \IjorTengab\FilesBulkOperation\Action\Reposition;
     try {
         $app->move()
             ->setWorkingDirectoryLookup('source')
-            ->setWorkingDirectoryDestionation('destination')
+            ->setWorkingDirectoryDestination('destination')
             ->setFileNamePattern('/record.*\D+(\d+)\D*\.mp4$/')
-            ->setDirectoryDestionationPattern('/^$1.*/', '$1')
+            ->setDirectoryDestinationPattern('/^$1.*/', '$1')
             ->execute();
         }
     catch (Exception $e) {
@@ -32,3 +33,4 @@ find destination
 echo '###' Cleaning
 rm -rf destination
 rm -rf source
+echo '###' Finish

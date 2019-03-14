@@ -1,5 +1,7 @@
-Files Auto Reposition
+Files Bulk Operation
 =====================
 
-Move your files with your own style.
+Available Operation:
+
+ - Move your files with your own style.
 

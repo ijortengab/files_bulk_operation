@@ -1,5 +1,5 @@
-Example 01
-==========
+Example 01 Reposition
+=====================
 
 ## Studi Kasus
 
@@ -7,7 +7,7 @@ Sebelumnya telah exists direktori:
 
 - /destination/112233-direktur
 
-dimana `112233` adalah unique identifier dan `diretur` adalah informasi tambahan.
+dimana `112233` adalah unique identifier (`${id}`) dan `diretur` adalah informasi tambahan (`${additional_info}`).
 
 Kemudian kita akan memindahkan file-file dengan pola sebagai berikut:
 
