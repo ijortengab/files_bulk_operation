@@ -17,7 +17,8 @@ VAR=$(cat <<'END_HEREDOC'
             ->setWorkingDirectoryLookup('source')
             ->setWorkingDirectoryDestination('destination')
             ->setFileNamePattern('/record.*\D+(\d+)\D*\.mp4$/')
-            ->setDirectoryDestinationPattern('/^$1.*/', '$1')
+            ->setDirectoryDestinationPattern('/^$1.*/', '/$1/')
+            ->setDirectoryDestinationDefault('/$1/')
             ->execute();
         }
     catch (Exception $e) {

@@ -1,3 +1,4 @@
+
 Example 01 Reposition
 =====================
 
@@ -23,17 +24,17 @@ ${id}${additional_info}*
 
 Contoh:
 
-- /source/record_20190201210022_112233.mp4
-- /source/record_20190201220022_112233.mp4
-- /source/record_20190301050129_4455.mp4
-- /source/record_20190301060722_4455.mp4
+- `/source/record_20190201210022_112233.mp4`
+- `/source/record_20190201220022_112233.mp4`
+- `/source/record_20190301050129_4455.mp4`
+- `/source/record_20190301060722_4455.mp4`
 
 Menjadi
 
-- /destination/112233-direktur/record_20190201210022_112233.mp4
-- /destination/112233-direktur/record_20190201220022_112233.mp4
-- /destination/4455/record_20190301050129_4455.mp4
-- /destination/4455/record_20190301060722_4455.mp4
+- `/destination/112233-direktur/record_20190201210022_112233.mp4`
+- `/destination/112233-direktur/record_20190201220022_112233.mp4`
+- `/destination/4455           /record_20190301050129_4455.mp4`
+- `/destination/4455           /record_20190301060722_4455.mp4`
 
 ## Test
 
