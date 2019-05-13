@@ -9,9 +9,7 @@ use Symfony\Component\Filesystem\Exception\IOExceptionInterface;
 class Reposition
 {
     /**
-     * The first two characters (from right) are about size.
-     * The next two characters are about modified.
-     * Equals means `11` and not equals means `00`.
+     * Binary flag to compared betwen source and destination. Relative to souce.
      */
     const SIZE_LOWER      = 0b00000001;
     const SIZE_HIGHER     = 0b00000010;
