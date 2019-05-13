@@ -9,6 +9,20 @@ use Symfony\Component\Filesystem\Exception\IOExceptionInterface;
 class Reposition
 {
     /**
+     * The first two characters (from right) are about size.
+     * The next two characters are about modified.
+     * Equals means `11` and not equals means `00`.
+     */
+    const SIZE_LOWER      = 0b00000001;
+    const SIZE_HIGHER     = 0b00000010;
+    const SIZE_EQUALS     = 0b00000100;
+    const SIZE_NOT_EQUALS = 0b00001000;
+    const DATE_OLDER      = 0b00010000;
+    const DATE_NEWER      = 0b00100000;
+    const DATE_EQUALS     = 0b01000000;
+    const DATE_NOT_EQUALS = 0b10000000;
+
+    /**
      * Instance of Symfony\Component\Filesystem\Filesystem.
      */
     protected $filesystem;
@@ -58,6 +72,10 @@ class Reposition
     protected $directory_destination_alt_pattern = null;
 
     protected $directory_destination_default = null;
+
+    protected $override_policy = false;
+
+    protected $override_callback = null;
 
     /**
      * Construct instance.
@@ -137,6 +155,36 @@ class Reposition
         return $this;
     }
 
+    /**
+     *
+     */
+    public function overridePolicy($bool, $callback = null)
+    {
+        $this->override_policy = $bool;
+        if (null !== $callback) {
+            $this->override_callback = $callback;
+        }
+        return $this;
+    }
+
+    /**
+     *
+     */
+    public function printLog(&$log)
+    {
+        $lines = [];
+        while ($line = array_shift($log)) {
+            if (isset($line[0]) && isset($line[1])) {
+                if (is_string($line[1])) {
+                    $lines[] = str_repeat('  ', --$line[0]) . $line[1];
+                }
+                elseif (is_array($line[1]) && isset($line[1][0]) && isset($line[1][1])) {
+                    $lines[] = str_repeat('  ', --$line[0]) . strtr($line[1][0], $line[1][1]);
+                }
+            }
+        }
+        echo implode(PHP_EOL, $lines) . PHP_EOL;
+    }
 
     /**
      *
@@ -239,40 +287,98 @@ class Reposition
             $directory_destination = Path::join($directory_destination, $directory_destination_default);
         }
 
-        // die('stop');
-
         $last_modified = $file->getMTime();
         $source = Path::join($this->working_directory_lookup, $file->getRelativePathname());
         $destination = Path::join($directory_destination, $file->getFilename());
         $base_path = PATH::getLongestCommonBasePath([$source, $destination]);
-        $log  = 'Moving.' . PHP_EOL;
-        $log .= '  From: ' . $base_path . PHP_EOL . "    " . PATH::makeRelative($source, $base_path) . PHP_EOL;
-        $log .= '  To:   ' . $base_path . PHP_EOL . "    " . PATH::makeRelative($destination, $base_path) . PHP_EOL;
+        $log[]  = [1, 'Moving file.'];
+        $log[]  = [2, ['Common base path: %path', ['%path' => $base_path]]];
+        $log[]  = [3, ['From : %path', ['%path' => PATH::makeRelative($source, $base_path)]]];
+        $log[]  = [3, ['To   : %path', ['%path' => PATH::makeRelative($destination, $base_path)]]];
+        $this->printLog($log);
+        $rename = true;
+        $override = false;
         if (file_exists($destination)) {
-            $info_source['size'] = filesize($source);
-            $info_source['modified'] = filemtime($source);
-            $info_destination['size'] = filesize($destination);
-            $info_destination['modified'] = filemtime($destination);
-            $log .= '  Destination has exists. ';
-            if ($info_source['size'] == $info_destination['size']) {
-                $log .= 'Size is equals. ';
+            $rename = false;
+            $_log = [];
+            $log_size = false;
+            $log_modified = false;
+            $_log[] = 'Destination has exists.';
+            // Check size and modified.
+            $info['source']['size'] = filesize($source);
+            $info['source']['modified'] = filemtime($source);
+            $info['destination']['size'] = filesize($destination);
+            $info['destination']['modified'] = filemtime($destination);
+            $source_condition = 0b000000;
+            if ($info['source']['size'] < $info['destination']['size']) {
+                $source_condition = $source_condition | static::SIZE_LOWER | static::SIZE_NOT_EQUALS;
+                $_log[] = 'Source is lower than destination.';
+                $log_size = true;
             }
-            else{
-                $log .= 'Size: source '.filesize($source).', destination '.filesize($destination).'. ';
+            elseif ($info['source']['size'] > $info['destination']['size']) {
+                $source_condition = $source_condition | static::SIZE_HIGHER | static::SIZE_NOT_EQUALS;
+                $_log[] = 'Source is higher than destination.';
+                $log_size = true;
             }
-            if ($info_source['modified'] == $info_destination['modified']) {
-                $log .= 'Date modified is equals. ';
+            else {
+                $source_condition = $source_condition | static::SIZE_EQUALS;
+                $_log[] = 'Size is equals.';
             }
-            else{
-                $log .= 'Date modified: source '.date('Y-m-d H:i:s', $info_source['modified']).', destination '.date('Y-m-d H:i:s', $info_destination['modified']).'. ';
+            if ($info['source']['modified'] < $info['destination']['modified']) {
+                $source_condition = $source_condition | static::DATE_OLDER | static::DATE_NOT_EQUALS;
+                $_log[] = 'Source is older than destination.';
+                $log_modified = true;
             }
-            $log .= PHP_EOL;
+            elseif ($info['source']['modified'] > $info['destination']['modified']) {
+                $source_condition = $source_condition | static::DATE_NEWER | static::DATE_NOT_EQUALS;
+                $_log[] = 'Source is newer than destination.';
+                $log_modified = true;
+            }
+            else {
+                $source_condition = $source_condition | static::DATE_EQUALS;
+                $_log[] = 'Date modified is equals.';
+            }
+            $log[] = [2, implode(' ', $_log)];
+            if ($log_size) {
+                $log[]  = [3, ['Source size          : %size', ['%size' => $info['source']['size']]]];
+                $log[]  = [3, ['Destination size     : %size', ['%size' => $info['destination']['size']]]];
+            }
+            if ($log_modified) {
+                $log[]  = [3, ['Source modified      : %date', ['%date' => date('Y-m-d H:i:s', $info['source']['modified'])]]];
+                $log[]  = [3, ['Destination modified : %date', ['%date' => date('Y-m-d H:i:s', $info['destination']['modified'])]]];
+            }
+            $this->printLog($log);
+            // Check override.
+            if ($this->override_policy) {
+                $rename = true;
+                $override = true;
+                $log[] = [2, 'Override destination.'];
+                if ($this->override_callback && is_callable($this->override_callback) ) {
+                    $override_decision = call_user_func($this->override_callback, $source_condition);
+                    if (true !== $override_decision) {
+                        $rename = false;
+                        $log[] = [3, 'Override terminated due the result of callback.'];
+                    }
+                    else {
+                        $log[] = [3, 'Override with callback condition.'];
+                    }
+                }
+                $this->printLog($log);
+            }
         }
-        else {
+        if ($rename) {
             if ($this->dry_run === false) {
                 $prepare_directory = Path::getDirectory($destination);
                 $prepare = $this->filesystem->mkdir($prepare_directory);
-                $this->filesystem->rename($source, $destination);
+                if ($override) {
+                    $this->filesystem->rename($source, $destination, true);
+                }
+                else {
+                    $this->filesystem->rename($source, $destination);
+                }
+                // Kejadian pada pindah partisi di Windows menggunakan
+                // Cygwin. Dimana rename, tapi date modified mengalami
+                // perubahan. Oleh karena itu, gunakan kembali touch.
                 if ($last_modified != filemtime($destination)) {
                     $result = @touch($destination, $last_modified);
                     if (false === $result) {
@@ -283,7 +389,5 @@ class Reposition
                 }
             }
         }
-        echo $log;
-
     }
 }
