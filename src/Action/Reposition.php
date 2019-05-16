@@ -4,12 +4,13 @@ namespace IjorTengab\FilesBulkOperation\Action;
 use Symfony\Component\Finder\Finder;
 use Webmozart\PathUtil\Path;
 use Symfony\Component\Filesystem\Filesystem;
-use Symfony\Component\Filesystem\Exception\IOExceptionInterface;
+use Symfony\Component\Filesystem\Exception\IOException;
 
 class Reposition
 {
     /**
-     * Binary flag to compared betwen source and destination. Relative to souce.
+     * Binary flag to compared betwen source and destination. Relative to
+     * source.
      */
     const SIZE_LOWER      = 0b00000001;
     const SIZE_HIGHER     = 0b00000010;
@@ -355,10 +356,10 @@ class Reposition
                     $override_decision = call_user_func($this->override_callback, $source_condition);
                     if (true !== $override_decision) {
                         $rename = false;
-                        $log[] = [3, 'Override terminated due the result of callback.'];
+                        $log[] = [3, 'Override terminated due the callback decision.'];
                     }
                     else {
-                        $log[] = [3, 'Override with callback condition.'];
+                        $log[] = [3, 'Override with callback decision.'];
                     }
                 }
                 $this->printLog($log);
@@ -368,23 +369,36 @@ class Reposition
             if ($this->dry_run === false) {
                 $prepare_directory = Path::getDirectory($destination);
                 $prepare = $this->filesystem->mkdir($prepare_directory);
-                if ($override) {
-                    $this->filesystem->rename($source, $destination, true);
-                }
-                else {
-                    $this->filesystem->rename($source, $destination);
-                }
-                // Kejadian pada pindah partisi di Windows menggunakan
-                // Cygwin. Dimana rename, tapi date modified mengalami
-                // perubahan. Oleh karena itu, gunakan kembali touch.
-                if ($last_modified != filemtime($destination)) {
-                    $result = @touch($destination, $last_modified);
-                    if (false === $result) {
-                        // @todo. Beri tahu via log kalo ada kegagalan touch
-                        // dan simpan informasi $last_modified untuk tindakan
-                        // alternative.
+                try {
+                    if ($override) {
+                        $this->filesystem->rename($source, $destination, true);
+                    }
+                    else {
+                        $this->filesystem->rename($source, $destination);
+                    }
+                    $log[] = [2, 'Moving success.'];
+                    // Kejadian pada pindah partisi di Windows menggunakan
+                    // Cygwin. Dimana rename, tapi date modified mengalami
+                    // perubahan. Oleh karena itu, gunakan kembali touch.
+                    // Clear terlebih dahulu.
+                    clearstatcache(true, $destination);
+                    $current_modified = filemtime($destination);
+                    if ($last_modified != $current_modified) {
+                        $log[] = [3, ['Terjadi Perubahan modified menjadi: %date.', ['%date' => date('Y-m-d H:i:s', $current_modified)]]];
+                        $result = @touch($destination, $last_modified);
+                        if (false === $result) {
+                            $log[] = [3, ['Gagal mengembalikan modified menjadi semula, yakni: %date.', ['%date' => date('Y-m-d H:i:s', $last_modified)]]];
+                        }
+                        else {
+                            $log[] = [3, ['Berhasil mengembalikan modified menjadi: %date.', ['%date' => date('Y-m-d H:i:s', $last_modified)]]];
+                        }
                     }
                 }
+                catch (IOException $e) {
+                    $log[] = [2, 'Moving failed.'];
+                    $log[] = [3, ['Error from Exception : %msg', ['%msg' => $e->getMessage()]]];
+                }
+                $this->printLog($log);
             }
         }
     }
