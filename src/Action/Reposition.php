@@ -52,29 +52,31 @@ class Reposition
     /**
      * Directory tempat mencari files yang akan dilakukan reposition.
      */
-    protected $working_directory_lookup = null;
+    protected $working_directory_lookup;
 
     /**
      * Deep level.
      */
-    protected $working_directory_lookup_level = null;
+    protected $working_directory_lookup_level;
 
     /**
      * Directory tempat menampung hasil reposition files.
      */
-    protected $working_directory_destination = null;
+    protected $working_directory_destination;
 
-    protected $filename_pattern = null;
+    protected $filename_pattern;
 
-    protected $directory_destination_pattern = null;
+    protected $directory_destination_pattern;
 
-    protected $directory_destination_alt_pattern = null;
+    protected $directory_destination_alt_pattern;
 
-    protected $directory_destination_default = null;
+    protected $directory_destination_default ;
 
     protected $override_policy = false;
 
-    protected $override_callback = null;
+    protected $override_callback;
+
+    protected $directory_listing;
 
     /**
      * Construct instance.
@@ -250,33 +252,66 @@ class Reposition
         $directory_destination_alt_pattern = false;
         $directory_destination_default = true;
 
+
+        // Cek kondisi
+        $_directory_destination_pattern = $this->directory_destination_pattern;
+        $_directory_destination_alt_pattern = $this->directory_destination_alt_pattern;
+        $_directory_destination_default = $this->directory_destination_default;
+        // $debugname = '_directory_destination_pattern'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
+        // $debugname = '_directory_destination_alt_pattern'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
+        // $debugname = '_directory_destination_default'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
+
         if ($this->directory_destination_pattern !== null) {
             $directory_destination_pattern = preg_replace($this->filename_pattern, $this->directory_destination_pattern, $file->getFilename());
-            $dirs = Finder::create()
-                ->directories()
-                ->path($directory_destination_pattern)
-                ->in($this->working_directory_destination);
-            if ($dirs->count() == 1) {
-                $dirs = iterator_to_array($dirs);
-                $dir = array_shift($dirs);
-                $directory_destination = Path::join($directory_destination, $dir->getRelativePathname());
+            // $debugname = 'directory_destination_pattern'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
+            if ($this->directory_listing === null) {
+                $dirs = Finder::create()
+                    ->directories()
+                    ->in($this->working_directory_destination);
+                $this->directory_listing = iterator_to_array($dirs);
+            }
+            $matches = [];
+            foreach ($this->directory_listing as $fullpath => $object) {
+                $relativePath = $object->getRelativePathName();
+                if (preg_match($directory_destination_pattern, $relativePath)) {
+                    $matches[] = $relativePath;
+                }
+            }
+            if (!empty($matches)) {
+                if (count($matches) > 1) {
+                    $log[] = [1, 'Warning.'];
+                    $log[] = [2, ['Found directory destination more than one with pattern: %pattern. Using the first one.', ['%pattern' => $directory_destination_pattern]]];
+                    foreach ($matches as $key => $match) {
+                        $log[] = [3, ['%no : %direktori', ['%no' => $key + 1, '%direktori' => $match]]];
+                    }
+                    $this->printLog($log);
+                }
+                $directory_destination = Path::join($directory_destination, $matches[0]);
                 $directory_destination_default = false;
             }
             elseif ($this->directory_destination_alt_pattern !== null) {
                 $directory_destination_alt_pattern = true;
             }
         }
-
         if ($directory_destination_alt_pattern) {
             $directory_destination_alt_pattern = preg_replace($this->filename_pattern, $this->directory_destination_alt_pattern, $file->getFilename());
-            $dirs = Finder::create()
-                ->directories()
-                ->path($directory_destination_pattern)
-                ->in($this->working_directory_destination);
-            if ($dirs->count() == 1) {
-                $dirs = iterator_to_array($dirs);
-                $dir = array_shift($dirs);
-                $directory_destination = Path::join($directory_destination, $dir->getRelativePathname());
+            $matches = [];
+            foreach ($this->directory_listing as $fullpath => $object) {
+                $relativePath = $object->getRelativePathName();
+                if (preg_match($directory_destination_alt_pattern, $relativePath)) {
+                    $matches[] = $relativePath;
+                }
+            }
+            if (!empty($matches)) {
+                if (count($matches) > 1) {
+                    $log[] = [1, 'Warning.'];
+                    $log[] = [2, ['Found directory destination more than one with pattern: %pattern. Using the first one.', ['%pattern' => $directory_destination_pattern]]];
+                    foreach ($matches as $key => $match) {
+                        $log[] = [3, ['%no : %direktori', ['%no' => $key + 1, '%direktori' => $match]]];
+                    }
+                    $this->printLog($log);
+                }
+                $directory_destination = Path::join($directory_destination, $matches[0]);
                 $directory_destination_default = false;
             }
         }
@@ -285,8 +320,23 @@ class Reposition
             $directory_destination_default = preg_replace($this->filename_pattern, $this->directory_destination_default, $file->getFilename());
             $directory_destination = Path::join($directory_destination, $directory_destination_default);
         }
-
         $last_modified = $file->getMTime();
+        $lastModified = \DateTime::createFromFormat('U', $last_modified);
+        $translate = [
+            '${date:Y}' => $lastModified->format('Y'), // 2019
+            '${date:y}' => $lastModified->format('y'), // 19
+            '${date:m}' => $lastModified->format('m'), // 01-12
+            '${date:n}' => $lastModified->format('n'), // 1-12
+            '${date:d}' => $lastModified->format('d'), // 01-31
+            '${date:j}' => $lastModified->format('j'), // 1-31
+            '${date:g}' => $lastModified->format('g'), // 1-12
+            '${date:G}' => $lastModified->format('G'), // 0-23
+            '${date:h}' => $lastModified->format('h'), // 01-12
+            '${date:H}' => $lastModified->format('H'), // 00-23
+            '${date:i}' => $lastModified->format('i'), // 00-59
+            '${date:s}' => $lastModified->format('s'), // 00-59
+        ];
+        $directory_destination = strtr($directory_destination, $translate);
         $source = Path::join($this->working_directory_lookup, $file->getRelativePathname());
         $destination = Path::join($directory_destination, $file->getFilename());
         $base_path = PATH::getLongestCommonBasePath([$source, $destination]);
