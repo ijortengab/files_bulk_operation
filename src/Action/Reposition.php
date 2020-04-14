@@ -321,7 +321,9 @@ class Reposition
             $directory_destination = Path::join($directory_destination, $directory_destination_default);
         }
         $last_modified = $file->getMTime();
+        $timezone = date_default_timezone_get();
         $lastModified = \DateTime::createFromFormat('U', $last_modified);
+        $lastModified->setTimezone(new \DateTimeZone($timezone));
         $translate = [
             '${date:Y}' => $lastModified->format('Y'), // 2019
             '${date:y}' => $lastModified->format('y'), // 19
