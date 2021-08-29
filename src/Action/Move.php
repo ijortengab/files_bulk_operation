@@ -27,12 +27,6 @@ class Move
     protected $filesystem;
 
     /**
-     * String. Informasi yang akan dilakukan oleh instance object ini.
-     * Options available: move.
-     */
-    protected $action;
-
-    /**
      * Simulated the action.
      */
     protected $dry_run = false;
@@ -62,15 +56,15 @@ class Move
     /**
      * Directory tempat menampung hasil reposition files.
      */
-    protected $root_directory_destination;
+    protected $root_target_directory;
 
     protected $filename_pattern;
 
-    protected $directory_destination_pattern;
+    protected $target_directory_pattern;
 
-    protected $directory_destination_alt_pattern;
+    protected $target_directory_alt_pattern;
 
-    protected $directory_destination_default ;
+    protected $target_directory_default ;
 
     protected $override_policy = false;
 
@@ -84,15 +78,6 @@ class Move
     public function __construct()
     {
         $this->filesystem = new Filesystem;
-        return $this;
-    }
-
-    /**
-     * Memberi tanda bahwa instance ini akan melakukan action moving files.
-     */
-    public function move()
-    {
-        $this->action = 'move';
         return $this;
     }
 
@@ -117,12 +102,12 @@ class Move
     }
 
     /**
-     * Set property `$root_directory_destination`. Validasi akan dilakukan
+     * Set property `$root_target_directory`. Validasi akan dilakukan
      * oleh object `Finder`.
      */
     public function setRootDirectoryDestination($dir)
     {
-        $this->root_directory_destination = $dir;
+        $this->root_target_directory = $dir;
         return $this;
     }
 
@@ -142,8 +127,8 @@ class Move
      */
     public function setDirectoryDestinationPattern($pattern, $alt_pattern = null)
     {
-        $this->directory_destination_pattern = $pattern;
-        $this->directory_destination_alt_pattern = $alt_pattern;
+        $this->target_directory_pattern = $pattern;
+        $this->target_directory_alt_pattern = $alt_pattern;
         return $this;
     }
 
@@ -152,7 +137,7 @@ class Move
      */
     public function setTargetDirectory($pattern)
     {
-        $this->directory_destination_default = $pattern;
+        $this->target_directory_default = $pattern;
         return $this;
     }
 
@@ -195,23 +180,15 @@ class Move
         if (null === $this->working_directory_lookup) {
             throw new \RuntimeException('Direktori Lookup belum didefinisikan.');
         }
-        if (null === $this->root_directory_destination) {
-            $this->root_directory_destination = $this->working_directory_lookup;
+        if (null === $this->root_target_directory) {
+            $this->root_target_directory = $this->working_directory_lookup;
         }
         if (
             null === $this->working_directory_lookup_level &&
-            Path::canonicalize($this->working_directory_lookup) != Path::canonicalize($this->root_directory_destination) &&
-            Path::isBasePath($this->working_directory_lookup, $this->root_directory_destination))
+            Path::canonicalize($this->working_directory_lookup) != Path::canonicalize($this->root_target_directory) &&
+            Path::isBasePath($this->working_directory_lookup, $this->root_target_directory))
         {
             throw new \RuntimeException('Direktori Destination tidak boleh berada di dalam Direktori Lookup.');
-        }
-        switch ($this->action) {
-            case 'move':
-
-                break;
-
-            default:
-                throw new \RuntimeException('Action Reposition belum didefinisikan.');
         }
     }
 
@@ -236,89 +213,80 @@ class Move
             $finder->name($this->filename_pattern);
         }
         // Action.
-        switch ($this->action) {
-            case 'move':
-                foreach ($finder as $file) {
-                    $this->actionMove($file);
-                }
-                break;
+        foreach ($finder as $file) {
+            $this->actionMove($file);
         }
     }
 
     protected function actionMove($file)
     {
-        $directory_destination = $this->root_directory_destination;
+        $root = $this->root_target_directory;
         // Directory destination must replace if pattern has been set.
-        $directory_destination_alt_pattern = false;
-        $directory_destination_default = true;
-
+        $target_directory_alt_pattern = false;
+        $target_directory_default = true;
 
         // Cek kondisi
-        $_directory_destination_pattern = $this->directory_destination_pattern;
-        $_directory_destination_alt_pattern = $this->directory_destination_alt_pattern;
-        $_directory_destination_default = $this->directory_destination_default;
-        // $debugname = '_directory_destination_pattern'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
-        // $debugname = '_directory_destination_alt_pattern'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
-        // $debugname = '_directory_destination_default'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
+        $_target_directory_pattern = $this->target_directory_pattern;
+        $_target_directory_alt_pattern = $this->target_directory_alt_pattern;
+        $_target_directory_default = $this->target_directory_default;
 
-        if ($this->directory_destination_pattern !== null) {
-            $directory_destination_pattern = preg_replace($this->filename_pattern, $this->directory_destination_pattern, $file->getFilename());
-            // $debugname = 'directory_destination_pattern'; echo "\r\n<pre>" . __FILE__ . ":" . __LINE__ . "\r\n". 'var_dump(' . $debugname . '): '; var_dump($$debugname); echo "</pre>\r\n";
+        $dirname = $root;
+        if ($this->target_directory_pattern !== null) {
+            $target_directory_pattern = preg_replace($this->filename_pattern, $this->target_directory_pattern, $file->getFilename());
             if ($this->directory_listing === null) {
                 $dirs = Finder::create()
                     ->directories()
-                    ->in($this->root_directory_destination);
+                    ->in($this->root_target_directory);
                 $this->directory_listing = iterator_to_array($dirs);
             }
             $matches = [];
             foreach ($this->directory_listing as $fullpath => $object) {
                 $relativePath = $object->getRelativePathName();
-                if (preg_match($directory_destination_pattern, $relativePath)) {
+                if (preg_match($target_directory_pattern, $relativePath)) {
                     $matches[] = $relativePath;
                 }
             }
             if (!empty($matches)) {
                 if (count($matches) > 1) {
                     $log[] = [1, 'Warning.'];
-                    $log[] = [2, ['Found directory destination more than one with pattern: %pattern. Using the first one.', ['%pattern' => $directory_destination_pattern]]];
+                    $log[] = [2, ['Found directory destination more than one with pattern: %pattern. Using the first one.', ['%pattern' => $target_directory_pattern]]];
                     foreach ($matches as $key => $match) {
                         $log[] = [3, ['%no : %direktori', ['%no' => $key + 1, '%direktori' => $match]]];
                     }
                     $this->printLog($log);
                 }
-                $directory_destination = Path::join($directory_destination, $matches[0]);
-                $directory_destination_default = false;
+                $dirname = Path::join($root, $matches[0]);
+                $target_directory_default = false;
             }
-            elseif ($this->directory_destination_alt_pattern !== null) {
-                $directory_destination_alt_pattern = true;
+            elseif ($this->target_directory_alt_pattern !== null) {
+                $target_directory_alt_pattern = true;
             }
         }
-        if ($directory_destination_alt_pattern) {
-            $directory_destination_alt_pattern = preg_replace($this->filename_pattern, $this->directory_destination_alt_pattern, $file->getFilename());
+        if ($target_directory_alt_pattern) {
+            $target_directory_alt_pattern = preg_replace($this->filename_pattern, $this->target_directory_alt_pattern, $file->getFilename());
             $matches = [];
             foreach ($this->directory_listing as $fullpath => $object) {
                 $relativePath = $object->getRelativePathName();
-                if (preg_match($directory_destination_alt_pattern, $relativePath)) {
+                if (preg_match($target_directory_alt_pattern, $relativePath)) {
                     $matches[] = $relativePath;
                 }
             }
             if (!empty($matches)) {
                 if (count($matches) > 1) {
                     $log[] = [1, 'Warning.'];
-                    $log[] = [2, ['Found directory destination more than one with pattern: %pattern. Using the first one.', ['%pattern' => $directory_destination_pattern]]];
+                    $log[] = [2, ['Found directory destination more than one with pattern: %pattern. Using the first one.', ['%pattern' => $target_directory_pattern]]];
                     foreach ($matches as $key => $match) {
                         $log[] = [3, ['%no : %direktori', ['%no' => $key + 1, '%direktori' => $match]]];
                     }
                     $this->printLog($log);
                 }
-                $directory_destination = Path::join($directory_destination, $matches[0]);
-                $directory_destination_default = false;
+                $dirname = Path::join($root, $matches[0]);
+                $target_directory_default = false;
             }
         }
-
-        if ($this->directory_destination_default !== null && $directory_destination_default) {
-            $directory_destination_default = preg_replace($this->filename_pattern, $this->directory_destination_default, $file->getFilename());
-            $directory_destination = Path::join($directory_destination, $directory_destination_default);
+        if ($this->target_directory_default !== null && $target_directory_default) {
+            $target_directory_default = preg_replace($this->filename_pattern, $this->target_directory_default, $file->getFilename());
+            $dirname = Path::join($root, $target_directory_default);
         }
         $last_modified = $file->getMTime();
         $timezone = date_default_timezone_get();
@@ -338,16 +306,25 @@ class Move
             '${date:i}' => $lastModified->format('i'), // 00-59
             '${date:s}' => $lastModified->format('s'), // 00-59
         ];
-        $directory_destination = strtr($directory_destination, $translate);
+        $dirname = strtr($dirname, $translate);
         $source = Path::join($this->working_directory_lookup, $file->getRelativePathname());
-        $destination = Path::join($directory_destination, $file->getFilename());
-        $base_path = PATH::getLongestCommonBasePath([$source, $destination]);
+        $destination = Path::join($dirname, $file->getFilename());
+
+        if ($destination == $source) {
+            $rename = false;
+            $base_path = PATH::getDirectory($source);
+            $this->override_policy = false;
+        }
+        else {
+            $rename = true;
+            $base_path = PATH::getLongestCommonBasePath([$source, $destination]);
+        }
+
         $log[]  = [1, 'Moving file.'];
         $log[]  = [2, ['Common base path: %path', ['%path' => $base_path]]];
         $log[]  = [3, ['From : %path', ['%path' => PATH::makeRelative($source, $base_path)]]];
         $log[]  = [3, ['To   : %path', ['%path' => PATH::makeRelative($destination, $base_path)]]];
         $this->printLog($log);
-        $rename = true;
         $override = false;
         if (file_exists($destination)) {
             $rename = false;
