@@ -6,7 +6,7 @@ use Webmozart\PathUtil\Path;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Filesystem\Exception\IOException;
 
-class Reposition
+class Move
 {
     /**
      * Binary flag to compared betwen source and destination. Relative to
@@ -62,7 +62,7 @@ class Reposition
     /**
      * Directory tempat menampung hasil reposition files.
      */
-    protected $working_directory_destination;
+    protected $root_directory_destination;
 
     protected $filename_pattern;
 
@@ -109,7 +109,7 @@ class Reposition
      * Set property `$working_directory_lookup`. Validasi akan dilakukan oleh
      * object `Finder`.
      */
-    public function setWorkingDirectoryLookup($dir, $level = null)
+    public function findFilesInsideDirectory($dir, $level = null)
     {
         $this->working_directory_lookup = $dir;
         $this->working_directory_lookup_level = $level;
@@ -117,12 +117,12 @@ class Reposition
     }
 
     /**
-     * Set property `$working_directory_destination`. Validasi akan dilakukan
+     * Set property `$root_directory_destination`. Validasi akan dilakukan
      * oleh object `Finder`.
      */
-    public function setWorkingDirectoryDestination($dir)
+    public function setRootDirectoryDestination($dir)
     {
-        $this->working_directory_destination = $dir;
+        $this->root_directory_destination = $dir;
         return $this;
     }
 
@@ -130,7 +130,7 @@ class Reposition
      * Set property `$filename_pattern`. Sekaligus otomatis bahwa object
      * `Finder` hanya akan mencari file saja.
      */
-    public function setFileNamePattern($pattern)
+    public function findFilesWithPattern($pattern)
     {
         $this->files = true;
         $this->filename_pattern = $pattern;
@@ -150,7 +150,7 @@ class Reposition
     /**
      *
      */
-    public function setDirectoryDestinationDefault($pattern)
+    public function setTargetDirectory($pattern)
     {
         $this->directory_destination_default = $pattern;
         return $this;
@@ -195,13 +195,13 @@ class Reposition
         if (null === $this->working_directory_lookup) {
             throw new \RuntimeException('Direktori Lookup belum didefinisikan.');
         }
-        if (null === $this->working_directory_destination) {
-            throw new \RuntimeException('Direktori Destination belum didefinisikan.');
+        if (null === $this->root_directory_destination) {
+            $this->root_directory_destination = $this->working_directory_lookup;
         }
         if (
             null === $this->working_directory_lookup_level &&
-            Path::canonicalize($this->working_directory_lookup) != Path::canonicalize($this->working_directory_destination) &&
-            Path::isBasePath($this->working_directory_lookup, $this->working_directory_destination))
+            Path::canonicalize($this->working_directory_lookup) != Path::canonicalize($this->root_directory_destination) &&
+            Path::isBasePath($this->working_directory_lookup, $this->root_directory_destination))
         {
             throw new \RuntimeException('Direktori Destination tidak boleh berada di dalam Direktori Lookup.');
         }
@@ -247,7 +247,7 @@ class Reposition
 
     protected function actionMove($file)
     {
-        $directory_destination = $this->working_directory_destination;
+        $directory_destination = $this->root_directory_destination;
         // Directory destination must replace if pattern has been set.
         $directory_destination_alt_pattern = false;
         $directory_destination_default = true;
@@ -267,7 +267,7 @@ class Reposition
             if ($this->directory_listing === null) {
                 $dirs = Finder::create()
                     ->directories()
-                    ->in($this->working_directory_destination);
+                    ->in($this->root_directory_destination);
                 $this->directory_listing = iterator_to_array($dirs);
             }
             $matches = [];
