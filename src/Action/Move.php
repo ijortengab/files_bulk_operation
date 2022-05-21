@@ -58,13 +58,17 @@ class Move
      */
     protected $root_target_directory;
 
-    protected $filename_pattern;
+    protected $filename_source_pattern;
+
+    protected $filename_source_pattern_reverse;
 
     protected $target_directory_pattern;
 
     protected $target_directory_alt_pattern;
 
-    protected $target_directory_default ;
+    protected $target_directory_default;
+
+    protected $filename_destination_pattern;
 
     protected $override_policy = false;
 
@@ -112,13 +116,18 @@ class Move
     }
 
     /**
-     * Set property `$filename_pattern`. Sekaligus otomatis bahwa object
+     * Set property `$filename_source_pattern`. Sekaligus otomatis bahwa object
      * `Finder` hanya akan mencari file saja.
      */
-    public function findFilesWithPattern($pattern)
+    public function findFilesWithPattern($pattern, $is_must_match = true)
     {
         $this->files = true;
-        $this->filename_pattern = $pattern;
+        if ($is_must_match) {
+            $this->filename_source_pattern = $pattern;
+        }
+        else {
+            $this->filename_source_pattern_reverse = $pattern;
+        }
         return $this;
     }
 
@@ -209,13 +218,26 @@ class Move
         if (null !== $this->working_directory_lookup_level) {
             $finder->depth($this->working_directory_lookup_level);
         }
-        if (null !== $this->filename_pattern) {
-            $finder->name($this->filename_pattern);
+
+        if (null !== $this->filename_source_pattern) {
+            $finder->name($this->filename_source_pattern);
+        }
+        if (null !== $this->filename_source_pattern_reverse) {
+            $finder->notName($this->filename_source_pattern_reverse);
         }
         // Action.
         foreach ($finder as $file) {
             $this->actionMove($file);
         }
+    }
+
+    /**
+     *
+     */
+    public function setFileName($pattern)
+    {
+        $this->filename_destination_pattern = $pattern;
+        return $this;
     }
 
     protected function actionMove($file)
@@ -232,7 +254,7 @@ class Move
 
         $dirname = $root;
         if ($this->target_directory_pattern !== null) {
-            $target_directory_pattern = preg_replace($this->filename_pattern, $this->target_directory_pattern, $file->getFilename());
+            $target_directory_pattern = preg_replace($this->filename_source_pattern, $this->target_directory_pattern, $file->getFilename());
             if ($this->directory_listing === null) {
                 $dirs = Finder::create()
                     ->directories()
@@ -263,7 +285,7 @@ class Move
             }
         }
         if ($target_directory_alt_pattern) {
-            $target_directory_alt_pattern = preg_replace($this->filename_pattern, $this->target_directory_alt_pattern, $file->getFilename());
+            $target_directory_alt_pattern = preg_replace($this->filename_source_pattern, $this->target_directory_alt_pattern, $file->getFilename());
             $matches = [];
             foreach ($this->directory_listing as $fullpath => $object) {
                 $relativePath = $object->getRelativePathName();
@@ -285,9 +307,27 @@ class Move
             }
         }
         if ($this->target_directory_default !== null && $target_directory_default) {
-            $target_directory_default = preg_replace($this->filename_pattern, $this->target_directory_default, $file->getFilename());
+            $target_directory_default = preg_replace($this->filename_source_pattern, $this->target_directory_default, $file->getFilename());
             $dirname = Path::join($root, $target_directory_default);
         }
+
+        // Populate full path of $source and $destination.
+        $source = Path::join($this->working_directory_lookup, $file->getRelativePathname());
+        $filename_destination = $file->getFilename();
+        $path_parts = pathinfo($filename_destination);
+        $path_parts['extension'] = isset($path_parts['extension']) ? $path_parts['extension'] : '';
+        $filename_source = $file->getFilename();
+
+        if (is_callable($this->filename_destination_pattern)) {
+            $filename_destination = call_user_func_array($this->filename_destination_pattern, [$this->filename_source_pattern, $filename_source]);
+            is_string($filename_destination) or $filename_destination = $filename_source;
+        }
+        elseif ($this->filename_destination_pattern !== null) {
+            if ($this->filename_source_pattern !== null) {
+                $filename_destination = preg_replace($this->filename_source_pattern, $this->filename_destination_pattern, $filename_source);
+            }
+        }
+        $destination = Path::join($dirname, $filename_destination);
         $last_modified = $file->getMTime();
         $timezone = date_default_timezone_get();
         $lastModified = \DateTime::createFromFormat('U', $last_modified);
@@ -305,11 +345,13 @@ class Move
             '${date:H}' => $lastModified->format('H'), // 00-23
             '${date:i}' => $lastModified->format('i'), // 00-59
             '${date:s}' => $lastModified->format('s'), // 00-59
+            '${extension}' => $path_parts['extension'],
+            '${basename}' => $path_parts['basename'],
+            '${filename}' => $path_parts['filename'],
         ];
-        $dirname = strtr($dirname, $translate);
-        $source = Path::join($this->working_directory_lookup, $file->getRelativePathname());
-        $destination = Path::join($dirname, $file->getFilename());
+        $destination = strtr($destination, $translate);
 
+        // Decision of Moving and Overriding.
         if ($destination == $source) {
             $rename = false;
             $base_path = PATH::getDirectory($source);
@@ -318,6 +360,11 @@ class Move
         else {
             $rename = true;
             $base_path = PATH::getLongestCommonBasePath([$source, $destination]);
+        }
+
+        // Skip if the same.
+        if ($source === $destination) {
+            return;
         }
 
         $log[]  = [1, 'Moving file.'];
