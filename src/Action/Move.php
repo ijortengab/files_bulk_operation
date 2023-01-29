@@ -116,6 +116,14 @@ class Move
     }
 
     /**
+     *
+     */
+    public function getRootDirectoryDestination()
+    {
+        return $this->root_target_directory;
+    }
+
+    /**
      * Set property `$filename_source_pattern`. Sekaligus otomatis bahwa object
      * `Finder` hanya akan mencari file saja.
      */
@@ -306,6 +314,10 @@ class Move
                 $target_directory_default = false;
             }
         }
+
+        if (is_callable($this->target_directory_default)) {
+            $this->target_directory_default = call_user_func_array($this->target_directory_default, [$file]);
+        }
         if ($this->target_directory_default !== null && $target_directory_default) {
             $target_directory_default = preg_replace($this->filename_source_pattern, $this->target_directory_default, $file->getFilename());
             $dirname = Path::join($root, $target_directory_default);
@@ -319,7 +331,7 @@ class Move
         $filename_source = $file->getFilename();
 
         if (is_callable($this->filename_destination_pattern)) {
-            $filename_destination = call_user_func_array($this->filename_destination_pattern, [$this->filename_source_pattern, $filename_source]);
+            $filename_destination = call_user_func_array($this->filename_destination_pattern, [$this->filename_source_pattern, $filename_source, $file->getPathName()]);
             is_string($filename_destination) or $filename_destination = $filename_source;
         }
         elseif ($this->filename_destination_pattern !== null) {
